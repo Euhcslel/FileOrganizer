@@ -5,19 +5,25 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
-var categories = map[string]string{
-	"image/jpeg": "image",
-	"image/png": "image",
-	"application/octet-stream": "application",
-	"application/pdf": "pdf",
+var categories = map[string]map[string]string{
+	"image": {},
+	"application": {
+		"pdf": "pdf",
+		"zip": "archive",
+		"octet-stream": "binary",
+	},
+	"text": {},
+	"video": {},
 }
 
 func main() {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-
+		log.Printf("ошибка при получении домашней директории пользователя: %s", err.Error())
+		return
 	}
 	defaultDir := "Downloads"
 
@@ -28,26 +34,49 @@ func main() {
 		return
 	}
 	for _, file := range files {
-		fileName := file.Name()
+		if file.IsDir() {
+			continue
+		}
+
 		oldPath := filepath.Join(path, file.Name())
-		file, err := os.Open(oldPath)
+		openedFile, err := os.Open(oldPath)
 		if err != nil {
 			log.Printf("ошибка при открытии файла: %s", err.Error())
-			return
+			continue
 		}
 		
-		defer file.Close()
-
+		
 		buffer := make([]byte, 512)
-		file.Read(buffer)
+		n, err := openedFile.Read(buffer)
+		if err != nil {
+			log.Printf("ошибка при чтении в буфер: %s", err.Error())
+			openedFile.Close()
+			continue
+		}
+		openedFile.Close()
 
-		ext := http.DetectContentType(buffer)
+		ext := http.DetectContentType(buffer[:n])
+		parts := strings.Split(ext, "/")
+		ext = parts[0]
 
-		categoryPath := filepath.Join(path, categories[ext])
-		os.Mkdir(categoryPath, 0755)
+		var category string
+		values, ok := categories[ext]
+		if !ok {
+			category = "others"
+		} else if ext == "application" {
+			if category, ok = values[parts[1]]; !ok {
+				category = "others"
+			}
+		} else {
+			category = ext
+		}
 
-		newPath := filepath.Join(categoryPath, fileName)
-		log.Println(newPath, fileName)
+		categoryPath := filepath.Join(path, category)
+		if err := os.MkdirAll(categoryPath, 0755); err != nil {
+			log.Printf("ошибка при создании новой папки: %s", err.Error())
+		}
+
+		newPath := filepath.Join(categoryPath, file.Name())
 		if err := os.Rename(oldPath, newPath); err != nil {
 			log.Printf("ошибка при перемещении файла %s: %s", file.Name(), err.Error())
 		}
