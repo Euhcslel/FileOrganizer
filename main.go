@@ -14,14 +14,13 @@ import (
 var categories = map[string]map[string]string{
 	"image": {},
 	"application": {
-		"pdf": "pdf",
-		"zip": "archive",
+		"pdf":          "pdf",
+		"zip":          "archive",
 		"octet-stream": "binary",
 	},
-	"text": {},
+	"text":  {},
 	"video": {},
 }
-
 
 func main() {
 	// Установка флагов
@@ -29,13 +28,12 @@ func main() {
 	preDraw := flag.Bool("predraw", false, "predraw scheme")
 	flag.Parse()
 
-	// Определение домашней директории
-	homeDir, err := os.UserHomeDir()
+	// Получение итогового пути до сортируемой папки
+	path, err := getFinalPath(*dir)
 	if err != nil {
 		log.Printf("ошибка при получении домашней директории пользователя: %s", err.Error())
 		return
 	}
-	path := filepath.Join(homeDir, *dir)
 
 	// Чтение папки
 	files, err := os.ReadDir(path)
@@ -53,41 +51,14 @@ func main() {
 			continue
 		}
 
-		// Открытие файла (для чтения)
 		oldPath := filepath.Join(path, file.Name())
-		openedFile, err := os.Open(oldPath)
+		ext, err := getFileExtension(oldPath)
 		if err != nil {
-			log.Printf("ошибка при открытии файла: %s", err.Error())
+			log.Println(err)
 			continue
 		}
-		
-		// Чтение файла в буфер
-		buffer := make([]byte, 512)
-		n, err := openedFile.Read(buffer)
-		if err != nil {
-			log.Printf("ошибка при чтении в буфер: %s", err.Error())
-			openedFile.Close()
-			continue
-		}
-		openedFile.Close()
 
-		// Определение расширения файла
-		ext := http.DetectContentType(buffer[:n])
-		parts := strings.Split(ext, "/")
-		ext = parts[0]
-
-		// Определение категории в зависимости от расширения
-		var category string
-		values, ok := categories[ext]
-		if !ok {
-			category = "others"
-		} else if ext == "application" {
-			if category, ok = values[parts[1]]; !ok {
-				category = "others"
-			}
-		} else {
-			category = ext
-		}
+		category := getFileCategory(ext)
 
 		// Заполнение итоговой структуры папок
 		if *preDraw {
@@ -108,14 +79,67 @@ func main() {
 		}
 	}
 
+	// Вывод структуры папки
 	if *preDraw {
 		for category, files := range structure {
 			fmt.Printf("\n%s/", category)
-	
+
 			for _, file := range files {
 				fmt.Printf("\n\t%s", file)
 			}
 		}
 		fmt.Println()
+	}
+}
+
+// getFileExtension возвращает расширение файла, определяя его по магическим битам файла.
+func getFileExtension(oldPath string) (string, error) {
+	// Открытие файла (для чтения)
+	openedFile, err := os.Open(oldPath)
+	if err != nil {
+		return "", fmt.Errorf("ошибка при открытии файла: %w", err)
+	}
+
+	// Чтение файла в буфер
+	buffer := make([]byte, 512)
+	n, err := openedFile.Read(buffer)
+	if err != nil {
+		openedFile.Close()
+		return "", fmt.Errorf("ошибка при чтении в буфер: %w", err)
+	}
+	openedFile.Close()
+
+	// Определение расширения файла
+	return http.DetectContentType(buffer[:n]), nil
+}
+
+// getFinalPath возвращает путь до сортируемой папки. Ищет папку в домашней директории пользователя.
+func getFinalPath(dir string) (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+
+	return filepath.Join(homeDir, dir), nil
+}
+
+// getFileCategory возвращает обобщенную категорию файла.
+// Если расширение файла начинает с application/, то разбор идет более детальный.
+func getFileCategory(ext string) string {
+	parts := strings.Split(ext, "/")
+	ext = parts[0]
+
+	subcategories, ok := categories[ext]
+	if !ok {
+		return "others"
+	} else if ext == "application" {
+		subcategory, ok := subcategories[parts[1]]
+		if !ok {
+			return "others"
+		} else {
+			return subcategory
+		}
+	} else {
+		return ext
 	}
 }
