@@ -12,12 +12,19 @@ import (
 
 // Обобщенные расширения файлов
 var categories = map[string]map[string]string{
-	"image": {},
 	"application": {
-		"pdf":          "pdf",
-		"zip":          "archive",
-		"octet-stream": "binary",
+		"pdf":                "pdf",
+		"postscript":         "pdf",
+		"x-gzip":             "archive",
+		"zip":                "archive",
+		"x-rar-compressed":   "archive",
+		"vnd.ms-fontobject":  "font",
+		"wasm":               "binary",
+		"octet-stream":       "binary",
 	},
+	"audio": {},
+	"font":  {},
+	"image": {},
 	"text":  {},
 	"video": {},
 }
@@ -94,7 +101,6 @@ func main() {
 
 // getFileExtension возвращает расширение файла, определяя его по магическим битам файла.
 func getFileExtension(oldPath string) (string, error) {
-	// Открытие файла (для чтения)
 	openedFile, err := os.Open(oldPath)
 	if err != nil {
 		return "", fmt.Errorf("ошибка при открытии файла: %w", err)
